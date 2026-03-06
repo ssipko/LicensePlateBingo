@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>License Plate Bingo 🚗</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+  :root {
+    --asphalt: #1a1a2e;
+    --road: #16213e;
+    --yellow: #f5c518;
+    --orange: #e8732a;
+    --red: #c0392b;
+    --cream: #f5f0e8;
+    --mint: #4ecdc4;
+    --found: #27ae60;
+    --rare-color: #9b59b6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--asphalt);
+    font-family: 'Barlow', sans-serif;
+    color: var(--cream);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 8px; height: 100%;
+    background: repeating-linear-gradient(to bottom, var(--yellow) 0px, var(--yellow) 30px, transparent 30px, transparent 60px);
+    opacity: 0.08;
+    z-index: 0;
+    animation: roadScroll 2s linear infinite;
+  }
+  @keyframes roadScroll { from { background-position: 0 0; } to { background-position: 0 60px; } }
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
+  .header { text-align: center; padding: 24px 0 16px; }
+  .header h1 {
+    font-family: 'Bebas Neue', cursive;
+    font-size: clamp(42px, 8vw, 80px);
+    letter-spacing: 4px;
+    color: var(--yellow);
+    text-shadow: 4px 4px 0px var(--orange), 8px 8px 0px rgba(0,0,0,0.3);
+    line-height: 1;
+  }
+  .header p { font-family: 'Barlow Condensed', sans-serif; font-size: 16px; opacity: 0.7; letter-spacing: 3px; text-transform: uppercase; margin-top: 6px; }
+  .setup-panel { background: var(--road); border: 2px solid rgba(245,197,24,0.3); border-radius: 12px; padding: 24px; margin: 16px 0; }
+  .setup-panel h2 { font-family: 'Bebas Neue', cursive; font-size: 28px; letter-spacing: 2px; color: var(--yellow); margin-bottom: 16px; }
+  .player-count-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .player-count-btns button {
+    background: transparent; border: 2px solid rgba(245,197,24,0.4); color: var(--cream);
+    font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 600;
+    padding: 8px 16px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
+  }
+  .player-count-btns button:hover, .player-count-btns button.active { background: var(--yellow); border-color: var(--yellow); color: var(--asphalt); }
+  .player-name-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .player-name-row input {
+    background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); border-radius: 6px;
+    color: var(--cream); font-family: 'Barlow', sans-serif; font-size: 15px; padding: 8px 12px; width: 140px; transition: border-color 0.15s;
+  }
+  .player-name-row input:focus { outline: none; border-color: var(--yellow); }
+  .start-btn {
+    display: block; margin: 18px auto 0; background: var(--yellow); color: var(--asphalt); border: none;
+    font-family: 'Bebas Neue', cursive; font-size: 22px; letter-spacing: 2px; padding: 12px 40px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s;
+  }
+  .start-btn:hover { background: var(--orange); color: white; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(232,115,42,0.4); }
+  .game-area { display: none; }
+  .game-area.active { display: block; }
+  .player-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .player-tab {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 700; letter-spacing: 1px;
+    padding: 8px 18px; border-radius: 8px 8px 0 0; border: 2px solid rgba(255,255,255,0.1);
+    border-bottom: none; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);
+    cursor: pointer; transition: all 0.15s; text-transform: uppercase;
+  }
+  .player-tab.active { background: var(--road); color: var(--yellow); border-color: rgba(245,197,24,0.3); }
+  .player-tab .tab-score { font-size: 11px; opacity: 0.7; margin-left: 4px; }
+  .progress-label { font-family: 'Barlow Condensed', sans-serif; font-size: 14px; letter-spacing: 1px; color: var(--mint); text-align: right; margin-bottom: 4px; }
+  .progress-bar-wrap { background: rgba(255,255,255,0.08); border-radius: 20px; height: 10px; margin: 6px 0 16px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; border-radius: 20px; background: linear-gradient(90deg, var(--mint), var(--yellow)); transition: width 0.5s ease; }
+  .map-container { background: var(--road); border: 2px solid rgba(245,197,24,0.15); border-radius: 12px; padding: 20px; margin-bottom: 18px; }
+  .map-container h3 { font-family: 'Bebas Neue', cursive; font-size: 20px; letter-spacing: 2px; color: var(--yellow); margin-bottom: 12px; }
+  #map-svg { width: 100%; height: auto; display: block; }
+  .state { fill: rgba(255,255,255,0.1); stroke: rgba(255,255,255,0.25); stroke-width: 0.5; cursor: pointer; transition: fill 0.2s; }
+  .state:hover { fill: rgba(245,197,24,0.4); }
+  .state.found { fill: var(--found); }
+  .state.rare-found { fill: var(--rare-color); }
+  .state-label { font-family: 'Barlow Condensed', sans-serif; font-size: 7px; fill: rgba(255,255,255,0.55); pointer-events: none; font-weight: 700; }
+  .state-label.found-label { fill: white; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; letter-spacing: 0.5px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+  .checklist-container { background: var(--road); border: 2px solid rgba(245,197,24,0.15); border-radius: 12px; padding: 20px; margin-bottom: 18px; }
+  .checklist-container h3 { font-family: 'Bebas Neue', cursive; font-size: 20px; letter-spacing: 2px; color: var(--yellow); margin-bottom: 14px; }
+  .state-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+  .state-btn {
+    background: rgba(255,255,255,0.06); border: 1.5px solid rgba(255,255,255,0.12); border-radius: 6px;
+    color: rgba(255,255,255,0.6); font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 600;
+    letter-spacing: 0.5px; padding: 7px 6px; cursor: pointer; text-align: center; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .state-btn:hover { border-color: rgba(245,197,24,0.5); background: rgba(245,197,24,0.1); color: var(--cream); }
+  .state-btn.found { background: rgba(39,174,96,0.25); border-color: var(--found); color: #2ecc71; }
+  .state-btn.rare { border-color: rgba(155,89,182,0.5); }
+  .state-btn.rare.found { background: rgba(155,89,182,0.35); border-color: var(--rare-color); color: #d7a9e3; }
+  .rare-star { font-size: 10px; }
+  .scoreboard { background: var(--road); border: 2px solid rgba(245,197,24,0.15); border-radius: 12px; padding: 20px; margin-bottom: 18px; }
+  .scoreboard h3 { font-family: 'Bebas Neue', cursive; font-size: 20px; letter-spacing: 2px; color: var(--yellow); margin-bottom: 12px; }
+  .score-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-family: 'Barlow Condensed', sans-serif; font-size: 16px; letter-spacing: 0.5px; }
+  .score-row:last-child { border-bottom: none; }
+  .score-row .rank { color: var(--yellow); font-weight: 700; width: 30px; }
+  .score-row .name { flex: 1; }
+  .score-row .pts { color: var(--mint); font-weight: 700; }
+  .score-row .plates { opacity: 0.6; font-size: 13px; margin-right: 12px; }
+  .reset-btn {
+    display: block; margin: 10px auto 30px; background: transparent; border: 2px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.5); font-family: 'Barlow Condensed', sans-serif; font-size: 14px;
+    letter-spacing: 1px; text-transform: uppercase; padding: 8px 22px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
+  }
+  .reset-btn:hover { border-color: var(--red); color: var(--red); }
+  .toast {
+    position: fixed; bottom: 28px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--yellow); color: var(--asphalt);
+    font-family: 'Bebas Neue', cursive; font-size: 22px; letter-spacing: 2px;
+    padding: 12px 28px; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    z-index: 1000; transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.rare-toast { background: var(--rare-color); color: white; }
+  #map-status { text-align:center; padding: 30px; font-family:'Barlow Condensed',sans-serif; color:rgba(255,255,255,0.4); font-size:15px; letter-spacing:1px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>License Plate Bingo</h1>
+    <p>🚗 &nbsp; The Ultimate Road Trip Challenge &nbsp; 🚗</p>
+  </div>
+
+  <div class="setup-panel" id="setup-panel">
+    <h2>Who's Playing?</h2>
+    <p style="font-size:14px;opacity:0.6;margin-bottom:10px;font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;">Number of players</p>
+    <div class="player-count-btns" id="count-btns">
+      <button onclick="setCount(2)" class="active">2</button>
+      <button onclick="setCount(3)">3</button>
+      <button onclick="setCount(4)">4</button>
+      <button onclick="setCount(5)">5</button>
+      <button onclick="setCount(6)">6</button>
+    </div>
+    <p style="font-size:14px;opacity:0.6;margin:14px 0 10px;font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;">Player names</p>
+    <div class="player-name-row" id="name-inputs"></div>
+    <button class="start-btn" onclick="startGame()">🏁 Start the Trip!</button>
+  </div>
+
+  <div class="game-area" id="game-area">
+    <div class="player-tabs" id="player-tabs"></div>
+    <div class="progress-label" id="progress-label">0 / 51 found</div>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+
+    <div class="map-container">
+      <h3>🗺️ United States — click a state to mark it found</h3>
+      <div id="map-status">Loading map…</div>
+      <svg id="map-svg" viewBox="0 0 960 600"></svg>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2)"></div>Not found</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--found)"></div>Found (+1 pt)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--rare-color)"></div>★ Rare: AK / HI / DC (+2 pts)</div>
+      </div>
+    </div>
+
+    <div class="checklist-container">
+      <h3>📋 State Checklist</h3>
+      <div class="state-grid" id="state-grid"></div>
+    </div>
+
+    <div class="scoreboard">
+      <h3>🏆 Scoreboard</h3>
+      <div id="scoreboard-rows"></div>
+    </div>
+    <button class="reset-btn" onclick="resetGame()">↺ Reset Game</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const FIPS_NAME = {
+  "01":"Alabama","02":"Alaska","04":"Arizona","05":"Arkansas","06":"California",
+  "08":"Colorado","09":"Connecticut","10":"Delaware","11":"District of Columbia",
+  "12":"Florida","13":"Georgia","15":"Hawaii","16":"Idaho","17":"Illinois",
+  "18":"Indiana","19":"Iowa","20":"Kansas","21":"Kentucky","22":"Louisiana",
+  "23":"Maine","24":"Maryland","25":"Massachusetts","26":"Michigan","27":"Minnesota",
+  "28":"Mississippi","29":"Missouri","30":"Montana","31":"Nebraska","32":"Nevada",
+  "33":"New Hampshire","34":"New Jersey","35":"New Mexico","36":"New York",
+  "37":"North Carolina","38":"North Dakota","39":"Ohio","40":"Oklahoma","41":"Oregon",
+  "42":"Pennsylvania","44":"Rhode Island","45":"South Carolina","46":"South Dakota",
+  "47":"Tennessee","48":"Texas","49":"Utah","50":"Vermont","51":"Virginia",
+  "53":"Washington","54":"West Virginia","55":"Wisconsin","56":"Wyoming"
+};
+
+const ABBR = {
+  "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
+  "Colorado":"CO","Connecticut":"CT","Delaware":"DE","District of Columbia":"DC",
+  "Florida":"FL","Georgia":"GA","Hawaii":"HI","Idaho":"ID","Illinois":"IL",
+  "Indiana":"IN","Iowa":"IA","Kansas":"KS","Kentucky":"KY","Louisiana":"LA",
+  "Maine":"ME","Maryland":"MD","Massachusetts":"MA","Michigan":"MI","Minnesota":"MN",
+  "Mississippi":"MS","Missouri":"MO","Montana":"MT","Nebraska":"NE","Nevada":"NV",
+  "New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM","New York":"NY",
+  "North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK","Oregon":"OR",
+  "Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD",
+  "Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT","Virginia":"VA",
+  "Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY"
+};
+
+const DISPLAY = { "District of Columbia": "Washington D.C." };
+const RARE = new Set(["Alaska","Hawaii","District of Columbia"]);
+const ALL_STATES = Object.values(FIPS_NAME).sort();
+
+function dn(s) { return DISPLAY[s] || s; }
+
+let players = [], currentPlayer = 0, playerCount = 2, topoData = null;
+
+// Fetch real TopoJSON map data
+fetch("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json")
+  .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+  .then(data => {
+    topoData = data;
+    document.getElementById('map-status').style.display = 'none';
+    if (players.length) renderMap();
+  })
+  .catch(() => {
+    document.getElementById('map-status').textContent = '⚠ Map failed to load. Use the checklist below.';
+  });
+
+function setCount(n) {
+  playerCount = n;
+  document.querySelectorAll('.player-count-btns button').forEach((b, i) => b.classList.toggle('active', i+2===n));
+  renderNameInputs();
+}
+
+function renderNameInputs() {
+  const c = document.getElementById('name-inputs');
+  const vals = Array.from(c.querySelectorAll('input')).map(i => i.value);
+  c.innerHTML = '';
+  for (let i = 0; i < playerCount; i++) {
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = `Player ${i+1}`;
+    inp.value = vals[i] || ''; inp.maxLength = 14;
+    c.appendChild(inp);
+  }
+}
+
+function startGame() {
+  const inputs = document.querySelectorAll('#name-inputs input');
+  players = Array.from(inputs).map((inp, i) => ({
+    name: inp.value.trim() || `Player ${i+1}`,
+    found: new Set(), points: 0
+  }));
+  currentPlayer = 0;
+  document.getElementById('setup-panel').style.display = 'none';
+  document.getElementById('game-area').classList.add('active');
+  renderTabs(); renderMap(); renderChecklist(); updateScoreboard(); updateProgress();
+}
+
+function renderMap() {
+  const svg = d3.select('#map-svg');
+  svg.selectAll('*').remove();
+  if (!topoData) return;
+
+  const player = players[currentPlayer];
+  const features = topojson.feature(topoData, topoData.objects.states).features;
+  const projection = d3.geoAlbersUsa().scale(1100).translate([480, 300]);
+  const path = d3.geoPath().projection(projection);
+  const g = svg.append('g');
+
+  g.selectAll('.state')
+    .data(features)
+    .enter().append('path')
+    .attr('d', path)
+    .attr('class', d => {
+      const name = FIPS_NAME[String(d.id).padStart(2,'0')];
+      if (!name) return 'state';
+      const found = player.found.has(name);
+      const rare = RARE.has(name);
+      return 'state' + (found && rare ? ' rare-found' : found ? ' found' : '');
+    })
+    .on('click', (e, d) => {
+      const name = FIPS_NAME[String(d.id).padStart(2,'0')];
+      if (name) toggleState(name);
+    })
+    .each(function(d) {
+      const name = FIPS_NAME[String(d.id).padStart(2,'0')] || '';
+      d3.select(this).append('title').text(dn(name) + (RARE.has(name) ? ' ★ Rare +2pts' : ''));
+    });
+
+  // Labels
+  features.forEach(d => {
+    const name = FIPS_NAME[String(d.id).padStart(2,'0')];
+    if (!name || !ABBR[name]) return;
+    const c = path.centroid(d);
+    if (!c || isNaN(c[0])) return;
+    g.append('text')
+      .attr('class', 'state-label' + (player.found.has(name) ? ' found-label' : ''))
+      .attr('x', c[0]).attr('y', c[1])
+      .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+      .text(ABBR[name]);
+  });
+}
+
+function renderChecklist() {
+  const grid = document.getElementById('state-grid');
+  grid.innerHTML = '';
+  const player = players[currentPlayer];
+  ALL_STATES.forEach(state => {
+    const isRare = RARE.has(state), isFound = player.found.has(state);
+    const btn = document.createElement('button');
+    btn.className = 'state-btn' + (isFound ? ' found' : '') + (isRare ? ' rare' : '');
+    btn.innerHTML = (isRare ? '<span class="rare-star">★</span>' : '') + dn(state);
+    btn.onclick = () => toggleState(state);
+    grid.appendChild(btn);
+  });
+}
+
+function toggleState(state) {
+  const player = players[currentPlayer];
+  const isRare = RARE.has(state);
+  if (player.found.has(state)) {
+    player.found.delete(state); player.points -= isRare ? 2 : 1;
+  } else {
+    player.found.add(state); player.points += isRare ? 2 : 1;
+    showToast(isRare ? `⭐ RARE! ${dn(state)} +2 pts!` : `✓ ${dn(state)} +1 pt`, isRare);
+  }
+  renderTabs(); renderMap(); renderChecklist(); updateProgress(); updateScoreboard();
+}
+
+function renderTabs() {
+  const el = document.getElementById('player-tabs');
+  el.innerHTML = '';
+  players.forEach((p, i) => {
+    const tab = document.createElement('div');
+    tab.className = 'player-tab' + (i===currentPlayer ? ' active' : '');
+    tab.innerHTML = `${p.name} <span class="tab-score">${p.points}pts</span>`;
+    tab.onclick = () => { currentPlayer = i; renderTabs(); renderMap(); renderChecklist(); updateProgress(); };
+    el.appendChild(tab);
+  });
+}
+
+function updateProgress() {
+  const p = players[currentPlayer];
+  const pct = Math.round(p.found.size / 51 * 100);
+  document.getElementById('progress-label').textContent = `${p.found.size} / 51 found — ${pct}%`;
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+function updateScoreboard() {
+  const el = document.getElementById('scoreboard-rows');
+  const sorted = [...players].sort((a,b) => b.points-a.points || b.found.size-a.found.size);
+  const medals = ['🥇','🥈','🥉'];
+  el.innerHTML = '';
+  sorted.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'score-row';
+    div.innerHTML = `<span class="rank">${medals[i]||i+1+'.'}</span><span class="name">${p.name}</span><span class="plates">${p.found.size} plates</span><span class="pts">${p.points} pts</span>`;
+    el.appendChild(div);
+  });
+}
+
+let toastTimer;
+function showToast(msg, rare=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (rare ? ' rare-toast' : '') + ' show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast' + (rare ? ' rare-toast' : ''); }, 2200);
+}
+
+function resetGame() {
+  if (!confirm('Reset the game? All progress will be lost.')) return;
+  players.forEach(p => { p.found = new Set(); p.points = 0; });
+  currentPlayer = 0;
+  renderTabs(); renderMap(); renderChecklist(); updateProgress(); updateScoreboard();
+}
+
+renderNameInputs();
+</script>
+</body>
+</html>
